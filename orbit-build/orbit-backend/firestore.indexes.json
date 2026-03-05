@@ -1,0 +1,27 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "messageHashes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seenAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "streak",       "order": "DESCENDING" },
+        { "fieldPath": "totalPerfect", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

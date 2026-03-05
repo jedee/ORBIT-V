@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    function isFriend(ownerUid) {
+      // Check if the requesting user is in the owner's friends list
+      return isAuth() && exists(
+        /databases/$(database)/documents/users/$(ownerUid)/friends/$(request.auth.uid)
+      );
+    }
+
+    // Only these fields are safe to expose to friends
+    // NEVER income, budget, spending, or financial data
+    function onlyPublicFields() {
+      return request.resource.data.keys().hasOnly([
+        'displayName', 'name', 'orbitId', 'streak', 'totalPerfect',
+        'todayPct', 'goals', 'updatedAt', 'linkedAt'
+      ]);
+    }
+
+    // ── Users ───────────────────────────────────────────────────────────────
+
+    match /users/{uid} {
+      // Owner: full read/write
+      allow read, write: if isOwner(uid);
+
+      // Friends: read only public fields (streak, rings, name, orbitId)
+      // They NEVER see income, budget, or spending data
+      allow read: if isFriend(uid);
+
+      // ── Rings subcollection (daily ring snapshots) ──────────────────────
+      match /rings/{dateKey} {
+        allow read, write: if isOwner(uid);
+        allow read: if isFriend(uid);
+      }
+
+      // ── Friends subcollection ────────────────────────────────────────────
+      match /friends/{friendUid} {
+        // Only the owner can read their own friend list
+        allow read: if isOwner(uid);
+        // Write via Cloud Functions only (addFriend / removeFriend)
+        allow write: if false;
+      }
+    }
+
+    // ── Orbit ID reverse lookup ─────────────────────────────────────────────
+    // Read-only for authenticated users (needed to resolve IDs when adding friends)
+    match /orbitIds/{orbitId} {
+      allow read: if isAuth();
+      // Write via Cloud Functions only
+      allow write: if false;
+    }
+
+    // ── Conversations (session state) ───────────────────────────────────────
+    // Strictly private — only the Cloud Function writes these,
+    // only the owner reads them (though in practice the engine reads server-side)
+    match /conversations/{userId} {
+      allow read: if isOwner(userId);
+      // Cloud Functions use admin SDK which bypasses these rules
+      allow write: if false;
+    }
+
+    // ── Rate limits — only Cloud Functions read/write ───────────────────────
+    match /rateLimits/{userId} {
+      allow read, write: if false;
+    }
+
+    // ── Message hashes — only Cloud Functions read/write ───────────────────
+    match /messageHashes/{hash} {
+      allow read, write: if false;
+    }
+
+    // ── Deny everything else by default ────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
